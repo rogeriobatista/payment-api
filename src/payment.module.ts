@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentEntity } from '@infrastructure/database/entities';
 import { TypeOrmPaymentRepository } from '@infrastructure/repositories';
 import { MercadoPagoService } from '@infrastructure/services';
-import { PaymentRepository } from '@domain/repositories';
 import {
   CreatePaymentUseCase,
   UpdatePaymentUseCase,

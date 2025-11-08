@@ -2,6 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+// Polyfill for crypto in case it's not available
+if (typeof globalThis.crypto === 'undefined') {
+  const { webcrypto } = require('crypto');
+  globalThis.crypto = webcrypto;
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   

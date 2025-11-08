@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { PaymentMethod, PaymentStatus } from '../enums';
 
 export class Payment {
@@ -18,7 +17,7 @@ export class Payment {
     paymentMethod: PaymentMethod,
     id?: string,
   ) {
-    this.id = id || uuidv4();
+    this.id = id;
     this.cpf = cpf;
     this.description = description;
     this.amount = amount;

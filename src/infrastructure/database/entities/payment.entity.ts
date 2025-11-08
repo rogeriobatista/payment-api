@@ -1,7 +1,7 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { PaymentMethod, PaymentStatus } from '@domain/enums';
 
-@Entity('payments')
+@Entity('payment')
 export class PaymentEntity {
   @PrimaryColumn('uuid')
   id: string;
@@ -16,21 +16,22 @@ export class PaymentEntity {
   amount: number;
 
   @Column({ 
-    type: 'enum', 
-    enum: PaymentMethod 
+    type: 'varchar', 
+    length: 20,
+    name: 'payment_method'
   })
   paymentMethod: PaymentMethod;
 
   @Column({ 
-    type: 'enum', 
-    enum: PaymentStatus,
+    type: 'varchar',
+    length: 20,
     default: PaymentStatus.PENDING
   })
   status: PaymentStatus;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
