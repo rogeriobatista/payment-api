@@ -1,4 +1,23 @@
 import { PaymentValidationResult, PaymentProcessingResult, NotificationResult } from '../types/payment-workflow.types';
+import { MercadoPagoService } from '../../infrastructure/services/mercado-pago.service';
+import { PaymentRepository } from '../../domain/repositories/payment.repository';
+import { TypeOrmPaymentRepository } from '../../infrastructure/repositories/typeorm-payment.repository';
+import { PaymentEntity } from '../../infrastructure/database/entities/payment.entity';
+import { DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { PaymentStatus } from '../../domain/enums/payment-status.enum';
+
+// Instâncias dos serviços (será injetado pelo worker)
+let mercadoPagoService: MercadoPagoService;
+let paymentRepository: PaymentRepository;
+let configService: ConfigService;
+
+// Função para inicializar dependências
+export function initializeActivities(dataSource: DataSource, config: ConfigService) {
+  configService = config;
+  mercadoPagoService = new MercadoPagoService(configService);
+  paymentRepository = new TypeOrmPaymentRepository(dataSource.getRepository(PaymentEntity));
+}
 
 // Activity para validar dados do pagamento
 export async function validatePayment(cpf: string, amount: number): Promise<PaymentValidationResult> {
@@ -33,18 +52,42 @@ export async function processPaymentWithProvider(
   description: string
 ): Promise<PaymentProcessingResult> {
   try {
-    // Simular processamento com provedor externo (Mercado Pago, Stripe, etc.)
     console.log(`Processing payment ${paymentId} with ${paymentMethod}`);
     
     if (paymentMethod === 'CREDIT_CARD') {
-      // Simular criação de checkout
-      return {
-        success: true,
-        checkoutUrl: `https://checkout.mercadopago.com/${paymentId}`,
-        externalId: `mp_${paymentId}_${Date.now()}`,
-      };
+      // Usar serviço real do Mercado Pago
+      if (mercadoPagoService) {
+        try {
+          const preference = await mercadoPagoService.createPreference({
+            title: description,
+            description: description,
+            quantity: 1,
+            unit_price: amount,
+            external_reference: paymentId,
+          });
+          
+          return {
+            success: true,
+            checkoutUrl: preference.init_point,
+            externalId: preference.id,
+          };
+        } catch (error) {
+          console.error('Erro ao criar preferência Mercado Pago:', error);
+          return {
+            success: false,
+            errorMessage: `Erro no Mercado Pago: ${error.message}`,
+          };
+        }
+      } else {
+        // Fallback para desenvolvimento
+        return {
+          success: true,
+          checkoutUrl: `https://checkout.mercadopago.com/${paymentId}`,
+          externalId: `mp_${paymentId}_${Date.now()}`,
+        };
+      }
     } else if (paymentMethod === 'PIX') {
-      // Simular geração de PIX
+      // Simular geração de PIX (pode ser expandido com API real)
       return {
         success: true,
         externalId: `pix_${paymentId}_${Date.now()}`,
@@ -72,8 +115,36 @@ export async function updatePaymentStatus(
   try {
     console.log(`Updating payment ${paymentId} status to ${status}`);
     
-    // Aqui você faria a atualização real no banco de dados
-    // await paymentRepository.update(paymentId, { status, externalId });
+    if (paymentRepository) {
+      // Mapear string para enum
+      let paymentStatus: PaymentStatus;
+      switch (status.toLowerCase()) {
+        case 'paid':
+          paymentStatus = PaymentStatus.PAID;
+          break;
+        case 'fail':
+        case 'failed':
+        case 'cancelled':
+          paymentStatus = PaymentStatus.FAIL;
+          break;
+        case 'pending':
+        default:
+          paymentStatus = PaymentStatus.PENDING;
+          break;
+      }
+      
+      // Atualizar no banco de dados
+      const updatedPayment = await paymentRepository.update(paymentId, { 
+        status: paymentStatus,
+        // Se tivesse campo externalId na entidade: externalId 
+      });
+      
+      return updatedPayment !== null;
+    } else {
+      // Fallback para desenvolvimento - apenas log
+      console.log(`[SIMULATED] Payment ${paymentId} updated to ${status}${externalId ? ` with external ID ${externalId}` : ''}`);
+      return true;
+    }
     
     return true;
   } catch (error) {

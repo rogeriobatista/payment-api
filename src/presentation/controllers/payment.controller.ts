@@ -36,6 +36,7 @@ import {
 } from '@application/dtos';
 import { PaymentMethod } from '@domain/enums';
 import { MercadoPagoService } from '@infrastructure/services';
+import { TemporalService } from '../../workflows/temporal.service';
 
 @ApiTags('Payments')
 @ApiBearerAuth('JWT-auth')
@@ -49,6 +50,7 @@ export class PaymentController {
     private readonly getPaymentUseCase: GetPaymentUseCase,
     private readonly listPaymentsUseCase: ListPaymentsUseCase,
     private readonly mercadoPagoService: MercadoPagoService,
+    private readonly temporalService: TemporalService,
   ) {}
 
   @Post()
@@ -72,8 +74,13 @@ export class PaymentController {
         },
         checkout_url: {
           type: 'string',
-          description: 'URL para checkout (quando aplicável)',
+          description: 'URL para checkout do Mercado Pago (cartão de crédito)',
           example: 'https://checkout.mercadopago.com.br/...'
+        },
+        workflow_id: {
+          type: 'string',
+          description: 'ID do workflow Temporal.io (cartão de crédito)',
+          example: 'payment-123e4567-e89b-12d3-a456-426614174000-1699536000000'
         }
       }
     }
@@ -107,10 +114,23 @@ export class PaymentController {
       const payment = await this.createPaymentUseCase.execute(createPaymentDto);
       
       let checkoutUrl: string | undefined;
+      let workflowId: string | undefined;
 
-      // Se for cartão de crédito, criar preferência no Mercado Pago
+      // Se for cartão de crédito, iniciar workflow Temporal e integrar com Mercado Pago
       if (createPaymentDto.paymentMethod === PaymentMethod.CREDIT_CARD) {
         try {
+          // Iniciar workflow Temporal para gerenciar o pagamento
+          const workflowHandle = await this.temporalService.startPaymentWorkflow({
+            paymentId: payment.id,
+            cpf: createPaymentDto.cpf,
+            description: createPaymentDto.description,
+            amount: createPaymentDto.amount,
+            paymentMethod: createPaymentDto.paymentMethod,
+          });
+          
+          workflowId = workflowHandle.workflowId;
+          
+          // Criar preferência no Mercado Pago
           const preference = await this.mercadoPagoService.createPreference({
             title: createPaymentDto.description,
             description: createPaymentDto.description,
@@ -120,19 +140,28 @@ export class PaymentController {
           });
           checkoutUrl = preference.init_point;
           
+          this.logger.log(`Workflow Temporal iniciado: ${workflowId} para pagamento ${payment.id}`);
           this.logger.log(`Preferência do Mercado Pago criada para pagamento ${payment.id}`);
         } catch (error) {
-          this.logger.error(`Erro ao criar preferência do Mercado Pago: ${error.message}`);
-          // Continue sem URL de checkout se houver erro
+          this.logger.error(`Erro ao iniciar workflow/Mercado Pago para pagamento ${payment.id}: ${error.message}`);
+          // Continue sem workflow/checkout se houver erro
         }
       }
 
-      const response: { payment: PaymentResponseDto; checkout_url?: string } = {
+      const response: { 
+        payment: PaymentResponseDto; 
+        checkout_url?: string;
+        workflow_id?: string;
+      } = {
         payment: new PaymentResponseDto(payment),
       };
 
       if (checkoutUrl) {
         response.checkout_url = checkoutUrl;
+      }
+
+      if (workflowId) {
+        response.workflow_id = workflowId;
       }
 
       return response;
@@ -258,6 +287,13 @@ export class PaymentController {
     type: Number,
     description: 'Número de itens por página',
     example: 10
+  })
+  @ApiQuery({
+    name: 'cpf',
+    required: false,
+    type: String,
+    description: 'Filtrar por CPF do pagador (com ou sem formatação)',
+    example: '11144477735'
   })
   @ApiQuery({
     name: 'status',

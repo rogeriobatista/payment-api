@@ -25,7 +25,9 @@ export class TypeOrmPaymentRepository implements PaymentRepository {
   }
 
   async findByCpf(cpf: string): Promise<Payment[]> {
-    const entities = await this.paymentRepository.find({ where: { cpf } });
+    // Normalizar CPF removendo pontos e traços para busca
+    const normalizedCpf = cpf.replace(/[.\-]/g, '');
+    const entities = await this.paymentRepository.find({ where: { cpf: normalizedCpf } });
     return entities.map(entity => this.toDomain(entity));
   }
 
@@ -38,7 +40,9 @@ export class TypeOrmPaymentRepository implements PaymentRepository {
     const queryBuilder = this.paymentRepository.createQueryBuilder('payment');
 
     if (filters?.cpf) {
-      queryBuilder.andWhere('payment.cpf = :cpf', { cpf: filters.cpf });
+      // Normalizar CPF removendo pontos e traços para busca
+      const normalizedCpf = filters.cpf.replace(/[.\-]/g, '');
+      queryBuilder.andWhere('payment.cpf = :cpf', { cpf: normalizedCpf });
     }
 
     if (filters?.paymentMethod) {

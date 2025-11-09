@@ -10,6 +10,7 @@ import {
   ListPaymentsUseCase,
 } from '@application/use-cases';
 import { PaymentController, WebhookController } from '@presentation/controllers';
+import { TemporalService } from './workflows/temporal.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([PaymentEntity])],
@@ -22,6 +23,7 @@ import { PaymentController, WebhookController } from '@presentation/controllers'
     },
     // Services
     MercadoPagoService,
+    TemporalService,
     // Use Cases
     CreatePaymentUseCase,
     UpdatePaymentUseCase,

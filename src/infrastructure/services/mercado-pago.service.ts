@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 export interface MercadoPagoPreferenceInput {
   title: string;
@@ -22,6 +22,7 @@ export class MercadoPagoService {
   private readonly logger = new Logger(MercadoPagoService.name);
   private readonly client: MercadoPagoConfig;
   private readonly preference: Preference;
+  private readonly payment: Payment;
 
   constructor(private readonly configService: ConfigService) {
     const accessToken = this.configService.get<string>('MERCADO_PAGO_ACCESS_TOKEN');
@@ -39,6 +40,7 @@ export class MercadoPagoService {
     });
 
     this.preference = new Preference(this.client);
+    this.payment = new Payment(this.client);
   }
 
   async createPreference(input: MercadoPagoPreferenceInput): Promise<MercadoPagoPreferenceResponse> {
@@ -98,6 +100,17 @@ export class MercadoPagoService {
     } catch (error) {
       this.logger.error(`Erro ao buscar preferência ${preferenceId}`, error);
       throw new Error('Falha ao buscar preferência de pagamento');
+    }
+  }
+
+  async getPayment(paymentId: string) {
+    try {
+      this.logger.log(`Buscando pagamento: ${paymentId}`);
+      const response = await this.payment.get({ id: paymentId });
+      return response;
+    } catch (error) {
+      this.logger.error(`Erro ao buscar pagamento ${paymentId}`, error);
+      throw new Error('Falha ao buscar dados do pagamento');
     }
   }
 }
