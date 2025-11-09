@@ -1,0 +1,310 @@
+# Docker Compose - Ambiente de Desenvolvimento
+# Serviços necessários + aplicação com hot reload via volume
+
+services:
+  # =================================
+  # BANCO DE DADOS PostgreSQL
+  # =================================
+  postgres:
+    image: postgres:12-alpine
+    container_name: payment-api-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: payment_api
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - payment-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_api"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # =================================
+  # REDIS CACHE
+  # =================================
+  redis:
+    image: redis:7-alpine
+    container_name: payment-api-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_dev:/data
+    networks:
+      - payment-network-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =================================
+  # TEMPORAL.IO SERVER
+  # =================================
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: payment-api-temporal-dev
+    restart: unless-stopped
+    ports:
+      - "7233:7233"  # Temporal Server gRPC
+      - "8233:8233"  # Temporal Web UI
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+      - BIND_ON_IP=0.0.0.0
+    volumes:
+      - temporal_data_dev:/etc/temporal
+    networks:
+      - payment-network-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 7233 || nc -z localhost 7233"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  # =================================
+  # APPLICATION - MAIN API (HOT RELOAD)
+  # =================================
+  payment-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: payment-api-app-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port
+    environment:
+      # Application
+      NODE_ENV: development
+      PORT: 3000
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: payment_api
+      
+      # Authentication
+      JWT_SECRET: your-super-secret-jwt-key-min-32-characters-for-development
+      JWT_EXPIRES_IN: 24h
+      
+      # Redis Cache
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      CACHE_TTL: 300
+      
+      # Temporal.io
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      
+      # Mercado Pago (desenvolvimento)
+      MERCADO_PAGO_ACCESS_TOKEN: TEST-development-token-placeholder
+      MERCADO_PAGO_PUBLIC_KEY: TEST-development-public-key-placeholder
+      MERCADO_PAGO_WEBHOOK_URL: http://localhost:3000/api/webhook/mercado-pago
+      MERCADO_PAGO_SUCCESS_URL: http://localhost:3000/payment/success
+      MERCADO_PAGO_FAILURE_URL: http://localhost:3000/payment/failure
+      MERCADO_PAGO_PENDING_URL: http://localhost:3000/payment/pending
+      MERCADO_PAGO_SANDBOX: true
+      
+      # Rate Limiting
+      THROTTLE_TTL: 60000
+      THROTTLE_LIMIT: 100
+      
+      # Health Check Configuration (desenvolvimento)
+      SKIP_HEALTH_CHECKS: true
+      DISABLE_STRICT_HEALTH_CHECKS: true
+      
+      # Logging
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    networks:
+      - payment-network-dev
+    volumes:
+      # Volume para hot reload - monta código fonte
+      - .:/app
+      - /app/node_modules  # Volume anônimo para node_modules
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # =================================
+  # TEMPORAL WORKER (HOT RELOAD)
+  # =================================
+  payment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: payment-api-worker-dev
+    restart: unless-stopped
+    environment:
+      # Application
+      NODE_ENV: development
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: payment_api
+      
+      # Temporal.io
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      
+      # Mercado Pago (desenvolvimento)
+      MERCADO_PAGO_ACCESS_TOKEN: TEST-development-token-placeholder
+      MERCADO_PAGO_PUBLIC_KEY: TEST-development-public-key-placeholder
+      MERCADO_PAGO_SANDBOX: true
+      
+      # Logging
+      LOG_LEVEL: debug
+    command: ["npm", "run", "worker:dev"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    networks:
+      - payment-network-dev
+    volumes:
+      # Volume para hot reload - monta código fonte
+      - .:/app
+      - /app/node_modules  # Volume anônimo para node_modules
+      - ./logs:/app/logs
+
+  # =================================
+  # FERRAMENTAS DE DESENVOLVIMENTO
+  # =================================
+  
+  # Adminer para administração de banco
+  adminer:
+    image: adminer
+    container_name: payment-api-adminer-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - payment-network-dev
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+
+  # Redis Commander para administração do Redis
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: payment-api-redis-commander-dev
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    networks:
+      - payment-network-dev
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+
+  # =================================
+  # MONITORAMENTO (OPCIONAL)
+  # =================================
+  
+  # Prometheus para métricas
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: payment-api-prometheus-dev
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data_dev:/prometheus
+    networks:
+      - payment-network-dev
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Grafana para dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: payment-api-grafana-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data_dev:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - payment-network-dev
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# =================================
+# NETWORKS
+# =================================
+networks:
+  payment-network-dev:
+    driver: bridge
+    name: payment-network-dev
+
+# =================================
+# VOLUMES
+# =================================
+volumes:
+  postgres_data_dev:
+    driver: local
+    name: payment-api-postgres-data-dev
+  redis_data_dev:
+    driver: local
+    name: payment-api-redis-data-dev
+  temporal_data_dev:
+    driver: local
+    name: payment-api-temporal-data-dev
+  prometheus_data_dev:
+    driver: local
+    name: payment-api-prometheus-data-dev
+  grafana_data_dev:
+    driver: local
+    name: payment-api-grafana-data-dev

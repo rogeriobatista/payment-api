@@ -1,0 +1,284 @@
+# Docker Compose - Ambiente de Produção
+# Todos os serviços necessários para execução em produção
+
+services:
+  # =================================
+  # BANCO DE DADOS PostgreSQL
+  # =================================
+  postgres:
+    image: postgres:12-alpine
+    container_name: payment-api-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: payment_api
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - payment-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_api"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # =================================
+  # REDIS CACHE
+  # =================================
+  redis:
+    image: redis:7-alpine
+    container_name: payment-api-redis-prod
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}"
+    volumes:
+      - redis_data:/data
+    networks:
+      - payment-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =================================
+  # TEMPORAL.IO SERVER
+  # =================================
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: payment-api-temporal-prod
+    restart: unless-stopped
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+      - "${TEMPORAL_UI_PORT:-8233}:8233"
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=${DB_PASSWORD:-postgres}
+      - POSTGRES_SEEDS=postgres
+      - BIND_ON_IP=0.0.0.0
+    volumes:
+      - temporal_data:/etc/temporal
+    networks:
+      - payment-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 7233 || nc -z localhost 7233"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  # =================================
+  # APPLICATION - MAIN API
+  # =================================
+  payment-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: payment-api-app-prod
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Application
+      NODE_ENV: production
+      PORT: 3000
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: payment_api
+      
+      # Authentication
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      
+      # Redis Cache
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: 0
+      CACHE_TTL: 300
+      
+      # Temporal.io
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      
+      # Mercado Pago
+      MERCADO_PAGO_ACCESS_TOKEN: ${MERCADO_PAGO_ACCESS_TOKEN}
+      MERCADO_PAGO_PUBLIC_KEY: ${MERCADO_PAGO_PUBLIC_KEY}
+      MERCADO_PAGO_WEBHOOK_URL: ${MERCADO_PAGO_WEBHOOK_URL}
+      MERCADO_PAGO_SUCCESS_URL: ${MERCADO_PAGO_SUCCESS_URL}
+      MERCADO_PAGO_FAILURE_URL: ${MERCADO_PAGO_FAILURE_URL}
+      MERCADO_PAGO_PENDING_URL: ${MERCADO_PAGO_PENDING_URL}
+      
+      # Rate Limiting
+      THROTTLE_TTL: 60000
+      THROTTLE_LIMIT: 100
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    networks:
+      - payment-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs:/app/logs
+
+  # =================================
+  # TEMPORAL WORKER
+  # =================================
+  payment-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: payment-api-worker-prod
+    restart: unless-stopped
+    environment:
+      # Application
+      NODE_ENV: production
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: payment_api
+      
+      # Temporal.io
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      
+      # Mercado Pago
+      MERCADO_PAGO_ACCESS_TOKEN: ${MERCADO_PAGO_ACCESS_TOKEN}
+      MERCADO_PAGO_PUBLIC_KEY: ${MERCADO_PAGO_PUBLIC_KEY}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    command: ["node", "dist/workflows/worker.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      payment-api:
+        condition: service_healthy
+    networks:
+      - payment-network
+    volumes:
+      - ./logs:/app/logs
+
+  # =================================
+  # PROMETHEUS METRICS
+  # =================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: payment-api-prometheus-prod
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - payment-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  # =================================
+  # GRAFANA DASHBOARD
+  # =================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: payment-api-grafana-prod
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - payment-network
+    depends_on:
+      - prometheus
+
+  # =================================
+  # NGINX PROXY REVERSO
+  # =================================
+  nginx:
+    image: nginx:alpine
+    container_name: payment-api-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - payment-api
+    networks:
+      - payment-network
+
+# =================================
+# NETWORKS
+# =================================
+networks:
+  payment-network:
+    driver: bridge
+    name: payment-network-prod
+
+# =================================
+# VOLUMES
+# =================================
+volumes:
+  postgres_data:
+    driver: local
+    name: payment-api-postgres-data-prod
+  redis_data:
+    driver: local
+    name: payment-api-redis-data-prod
+  temporal_data:
+    driver: local
+    name: payment-api-temporal-data-prod
+  prometheus_data:
+    driver: local
+    name: payment-api-prometheus-data-prod
+  grafana_data:
+    driver: local
+    name: payment-api-grafana-data-prod
