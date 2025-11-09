@@ -28,6 +28,11 @@ import {
   GetPaymentUseCase,
   ListPaymentsUseCase,
 } from '@application/use-cases';
+import { 
+  StrictRateLimit, 
+  ModerateRateLimit,
+  LenientRateLimit 
+} from '../../rate-limit/decorators/rate-limit.decorator';
 import {
   CreatePaymentDto,
   UpdatePaymentDto,
@@ -54,6 +59,7 @@ export class PaymentController {
   ) {}
 
   @Post()
+  @StrictRateLimit() // 5 requests per minute para criação de pagamentos
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ 
     summary: 'Criar novo pagamento',
@@ -181,6 +187,7 @@ export class PaymentController {
   }
 
   @Put(':id')
+  @ModerateRateLimit() // 20 requests per minute para atualizações
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Atualizar pagamento existente',
@@ -235,6 +242,7 @@ export class PaymentController {
   }
 
   @Get(':id')
+  @LenientRateLimit() // 100 requests per minute para consultas
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Obter pagamento por ID',
@@ -269,6 +277,7 @@ export class PaymentController {
   }
 
   @Get()
+  @LenientRateLimit() // 100 requests per minute para listagem
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Listar pagamentos',

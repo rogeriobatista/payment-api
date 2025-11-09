@@ -6,6 +6,7 @@ import { TemporalService } from '../../workflows/temporal.service';
 import { PaymentRepository } from '@domain/repositories';
 import { Payment } from '@domain/entities';
 import { MercadoPagoService } from '../../infrastructure/services/mercado-pago.service';
+import { ModerateRateLimit } from '../../rate-limit/decorators/rate-limit.decorator';
 
 interface MercadoPagoWebhookDto {
   id: number;
@@ -36,6 +37,7 @@ export class WebhookController {
   ) {}
 
   @Post('mercado-pago')
+  @ModerateRateLimit() // 20 requests per minute para webhooks
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Webhook do Mercado Pago',
