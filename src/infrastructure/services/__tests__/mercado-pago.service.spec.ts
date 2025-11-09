@@ -9,6 +9,10 @@ jest.mock('mercadopago', () => ({
     create: jest.fn(),
     get: jest.fn(),
   })),
+  Payment: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    search: jest.fn(),
+  })),
 }));
 
 describe('MercadoPagoService', () => {

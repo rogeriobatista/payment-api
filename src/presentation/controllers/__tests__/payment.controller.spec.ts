@@ -10,6 +10,7 @@ import { ListPaymentsDto } from '../../../application/dtos/list-payments.dto';
 import { PaymentMethod, PaymentStatus } from '../../../domain/enums';
 import { Payment } from '../../../domain/entities/payment.entity';
 import { MercadoPagoService } from '../../../infrastructure/services/mercado-pago.service';
+import { TemporalService } from '../../../workflows/temporal.service';
 
 describe('PaymentController', () => {
   let controller: PaymentController;
@@ -18,6 +19,7 @@ describe('PaymentController', () => {
   let getPaymentUseCase: jest.Mocked<GetPaymentUseCase>;
   let listPaymentsUseCase: jest.Mocked<ListPaymentsUseCase>;
   let mercadoPagoService: jest.Mocked<MercadoPagoService>;
+  let temporalService: jest.Mocked<TemporalService>;
 
   beforeEach(async () => {
     const mockCreatePaymentUseCase = {
@@ -38,6 +40,12 @@ describe('PaymentController', () => {
 
     const mockMercadoPagoService = {
       createPreference: jest.fn(),
+    };
+
+    const mockTemporalService = {
+      startWorkflow: jest.fn(),
+      signalWorkflow: jest.fn(),
+      startPaymentWorkflow: jest.fn().mockResolvedValue('temporal-workflow-id'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -63,6 +71,10 @@ describe('PaymentController', () => {
           provide: MercadoPagoService,
           useValue: mockMercadoPagoService,
         },
+        {
+          provide: TemporalService,
+          useValue: mockTemporalService,
+        },
       ],
     }).compile();
 
@@ -72,6 +84,7 @@ describe('PaymentController', () => {
     getPaymentUseCase = module.get(GetPaymentUseCase);
     listPaymentsUseCase = module.get(ListPaymentsUseCase);
     mercadoPagoService = module.get(MercadoPagoService);
+    temporalService = module.get(TemporalService);
   });
 
   afterEach(() => {
