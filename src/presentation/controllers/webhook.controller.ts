@@ -1,4 +1,5 @@
 import { Controller, Post, Body, HttpStatus, HttpCode, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { UpdatePaymentUseCase } from '@application/use-cases';
 import { PaymentStatus } from '@domain/enums';
 
@@ -17,6 +18,7 @@ interface MercadoPagoWebhookDto {
   };
 }
 
+@ApiTags('Webhooks')
 @Controller('api/webhook')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
@@ -27,6 +29,51 @@ export class WebhookController {
 
   @Post('mercado-pago')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Webhook do Mercado Pago',
+    description: 'Recebe notificações de eventos do Mercado Pago para atualizar status de pagamentos'
+  })
+  @ApiBody({
+    description: 'Dados do webhook do Mercado Pago',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', example: 12345 },
+        live_mode: { type: 'boolean', example: false },
+        type: { type: 'string', example: 'payment' },
+        date_created: { type: 'string', example: '2025-11-08T17:30:00.000Z' },
+        application_id: { type: 'number', example: 123456789 },
+        user_id: { type: 'number', example: 987654321 },
+        version: { type: 'number', example: 1 },
+        api_version: { type: 'string', example: 'v1' },
+        action: { type: 'string', example: 'payment.created' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'payment_id_123' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Webhook processado com sucesso',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Webhook processado com sucesso' }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Dados de webhook inválidos' 
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Erro interno ao processar webhook' 
+  })
   async handleMercadoPagoWebhook(@Body() webhookData: MercadoPagoWebhookDto) {
     this.logger.log(`Webhook recebido do Mercado Pago: ${JSON.stringify(webhookData)}`);
 

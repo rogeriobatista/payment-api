@@ -1,8 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { typeOrmConfig } from './infrastructure/database/database.config';
 import { PaymentModule } from './payment.module';
+import { AuthModule } from './auth/auth.module';
+import { RateLimitModule } from './rate-limit/rate-limit.module';
+import { LoggingModule } from './logging/logging.module';
+import { CustomCacheModule } from './cache/cache.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { TemporalModule } from './workflows/temporal.module';
+import { MetricsInterceptor } from './metrics/metrics.interceptor';
 
 @Module({
   imports: [
@@ -10,11 +19,33 @@ import { PaymentModule } from './payment.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 100, // 100 requests per minute
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => typeOrmConfig(configService),
     }),
     PaymentModule,
+    AuthModule,
+    RateLimitModule,
+    LoggingModule,
+    CustomCacheModule,
+    MetricsModule,
+    TemporalModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: MetricsInterceptor,
+    },
   ],
 })
 export class AppModule {}

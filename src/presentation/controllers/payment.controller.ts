@@ -13,6 +13,15 @@ import {
   Logger,
 } from '@nestjs/common';
 import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBearerAuth,
+  ApiBody,
+} from '@nestjs/swagger';
+import {
   CreatePaymentUseCase,
   UpdatePaymentUseCase,
   GetPaymentUseCase,
@@ -27,6 +36,8 @@ import {
 import { PaymentMethod } from '@domain/enums';
 import { MercadoPagoService } from '@infrastructure/services';
 
+@ApiTags('Payments')
+@ApiBearerAuth('JWT-auth')
 @Controller('api/payment')
 export class PaymentController {
   private readonly logger = new Logger(PaymentController.name);
@@ -41,6 +52,51 @@ export class PaymentController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ 
+    summary: 'Criar novo pagamento',
+    description: 'Cria um novo pagamento e gera URL de checkout quando necessário'
+  })
+  @ApiBody({ 
+    type: CreatePaymentDto,
+    description: 'Dados para criação do pagamento'
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Pagamento criado com sucesso',
+    schema: {
+      type: 'object',
+      properties: {
+        payment: {
+          $ref: '#/components/schemas/PaymentResponseDto'
+        },
+        checkout_url: {
+          type: 'string',
+          description: 'URL para checkout (quando aplicável)',
+          example: 'https://checkout.mercadopago.com.br/...'
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Dados inválidos fornecidos',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: { 
+          type: 'array',
+          items: { type: 'string' },
+          example: ['CPF deve estar no formato 000.000.000-00 ou 00000000000']
+        },
+        error: { type: 'string', example: 'Bad Request' }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Erro interno do servidor' 
+  })
   async createPayment(
     @Body(new ValidationPipe({ transform: true })) createPaymentDto: CreatePaymentDto,
   ): Promise<{ payment: PaymentResponseDto; checkout_url?: string }> {
@@ -82,6 +138,34 @@ export class PaymentController {
 
   @Put(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Atualizar pagamento existente',
+    description: 'Atualiza os dados de um pagamento existente'
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID único do pagamento',
+    type: 'string',
+    format: 'uuid',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  @ApiBody({ 
+    type: UpdatePaymentDto,
+    description: 'Dados para atualização do pagamento'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Pagamento atualizado com sucesso',
+    type: PaymentResponseDto
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Dados inválidos ou ID inválido' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Pagamento não encontrado' 
+  })
   async updatePayment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ValidationPipe({ transform: true })) updatePaymentDto: UpdatePaymentDto,
@@ -94,6 +178,29 @@ export class PaymentController {
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Obter pagamento por ID',
+    description: 'Retorna os detalhes de um pagamento específico'
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID único do pagamento',
+    type: 'string',
+    format: 'uuid'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Pagamento encontrado com sucesso',
+    type: PaymentResponseDto
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'ID inválido fornecido' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Pagamento não encontrado' 
+  })
   async getPayment(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<PaymentResponseDto> {
@@ -105,6 +212,45 @@ export class PaymentController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Listar pagamentos',
+    description: 'Retorna uma lista de pagamentos com filtros opcionais'
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Número da página (começa em 1)',
+    example: 1
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Número de itens por página',
+    example: 10
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['PENDING', 'PAID', 'FAIL'],
+    description: 'Filtrar por status do pagamento'
+  })
+  @ApiQuery({
+    name: 'paymentMethod',
+    required: false,
+    enum: ['CREDIT_CARD', 'PIX'],
+    description: 'Filtrar por método de pagamento'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Lista de pagamentos retornada com sucesso',
+    type: [PaymentResponseDto]
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Parâmetros de consulta inválidos' 
+  })
   async listPayments(
     @Query(new ValidationPipe({ transform: true })) listPaymentsDto: ListPaymentsDto,
   ): Promise<PaymentResponseDto[]> {

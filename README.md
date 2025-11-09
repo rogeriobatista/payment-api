@@ -1,6 +1,54 @@
-# Payment API
+# Payment API - Sistema Avançado de Pagamentos
 
-Uma API completa para processamento de pagamentos PIX e Cartão de Crédito, construída com **NestJS**, **Clean Architecture**, **TypeORM** e integração com **Mercado Pago**.
+Uma API robusta para processamento de pagamentos com **autenticação JWT**, **rate limiting**, **cache Redis**, **métricas Prometheus**, **workflows Temporal.io** e **documentação OpenAPI completa**.
+
+## 🚀 Quick Start
+
+### 1. Instalar dependências
+```bash
+npm install
+```
+
+### 2. Configurar ambiente
+Criar arquivo `.env`:
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/paymentdb
+JWT_SECRET=your-super-secret-key
+REDIS_HOST=localhost
+REDIS_PORT=6379
+TEMPORAL_ADDRESS=localhost:7233
+TEMPORAL_NAMESPACE=default
+NODE_ENV=development
+```
+
+### 3. Executar serviços
+```bash
+# Terminal 1: Temporal Server
+temporal server start-dev
+
+# Terminal 2: Worker Temporal
+npm run worker:dev
+
+# Terminal 3: API
+npm run start:dev
+```
+
+### 4. Acessar
+- 🌐 **API**: http://localhost:3001
+- 📚 **Documentação**: http://localhost:3001/api/docs
+- 🔍 **Temporal UI**: http://localhost:8233
+- 📊 **Métricas**: http://localhost:3001/metrics
+- 💚 **Health**: http://localhost:3001/health
+
+## 🎯 Funcionalidades Implementadas ✅
+
+1. **🔐 Autenticação JWT** - Sistema completo com refresh tokens
+2. **🛡️ Rate Limiting** - Proteção contra abuso (10-60 req/min)
+3. **⚡ Cache Redis** - Performance otimizada com fallback
+4. **📝 Logs Estruturados** - Winston com interceptors
+5. **📊 Métricas Prometheus** - Monitoramento completo
+6. **📚 Documentação OpenAPI** - Swagger detalhado
+7. **🔄 Workflows Temporal.io** - Processamento robusto
 
 ## 📋 Índice
 
