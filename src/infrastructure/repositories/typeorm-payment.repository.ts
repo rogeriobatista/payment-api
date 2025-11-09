@@ -47,6 +47,12 @@ export class TypeOrmPaymentRepository implements PaymentRepository {
       });
     }
 
+    if (filters?.status) {
+      queryBuilder.andWhere('payment.status = :status', { 
+        status: filters.status 
+      });
+    }
+
     if (filters?.limit) {
       queryBuilder.limit(filters.limit);
     }

@@ -1,5 +1,5 @@
 import { Payment } from '../entities';
-import { PaymentMethod } from '../enums';
+import { PaymentMethod, PaymentStatus } from '../enums';
 
 export interface PaymentRepository {
   save(payment: Payment): Promise<Payment>;
@@ -13,6 +13,7 @@ export interface PaymentRepository {
 export interface PaymentFilters {
   cpf?: string;
   paymentMethod?: PaymentMethod;
+  status?: PaymentStatus;
   limit?: number;
   offset?: number;
 }
