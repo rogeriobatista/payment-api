@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   ValidationPipe,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -102,38 +103,52 @@ export class PaymentController {
   ): Promise<{ payment: PaymentResponseDto; checkout_url?: string }> {
     this.logger.log(`Criando pagamento: ${JSON.stringify(createPaymentDto)}`);
 
-    const payment = await this.createPaymentUseCase.execute(createPaymentDto);
-    
-    let checkoutUrl: string | undefined;
+    try {
+      const payment = await this.createPaymentUseCase.execute(createPaymentDto);
+      
+      let checkoutUrl: string | undefined;
 
-    // Se for cartão de crédito, criar preferência no Mercado Pago
-    if (createPaymentDto.paymentMethod === PaymentMethod.CREDIT_CARD) {
-      try {
-        const preference = await this.mercadoPagoService.createPreference({
-          title: createPaymentDto.description,
-          description: createPaymentDto.description,
-          quantity: 1,
-          unit_price: createPaymentDto.amount,
-          external_reference: payment.id,
-        });
-        checkoutUrl = preference.init_point;
-        
-        this.logger.log(`Preferência do Mercado Pago criada para pagamento ${payment.id}`);
-      } catch (error) {
-        this.logger.error(`Erro ao criar preferência do Mercado Pago: ${error.message}`);
-        // Continue sem URL de checkout se houver erro
+      // Se for cartão de crédito, criar preferência no Mercado Pago
+      if (createPaymentDto.paymentMethod === PaymentMethod.CREDIT_CARD) {
+        try {
+          const preference = await this.mercadoPagoService.createPreference({
+            title: createPaymentDto.description,
+            description: createPaymentDto.description,
+            quantity: 1,
+            unit_price: createPaymentDto.amount,
+            external_reference: payment.id,
+          });
+          checkoutUrl = preference.init_point;
+          
+          this.logger.log(`Preferência do Mercado Pago criada para pagamento ${payment.id}`);
+        } catch (error) {
+          this.logger.error(`Erro ao criar preferência do Mercado Pago: ${error.message}`);
+          // Continue sem URL de checkout se houver erro
+        }
       }
+
+      const response: { payment: PaymentResponseDto; checkout_url?: string } = {
+        payment: new PaymentResponseDto(payment),
+      };
+
+      if (checkoutUrl) {
+        response.checkout_url = checkoutUrl;
+      }
+
+      return response;
+    } catch (error) {
+      this.logger.error(`Erro ao criar pagamento: ${error.message}`);
+      
+      // Se for erro de validação de domínio, retornar Bad Request
+      if (error.message.includes('CPF inválido') || 
+          error.message.includes('obrigatório') || 
+          error.message.includes('inválido')) {
+        throw new BadRequestException(error.message);
+      }
+      
+      // Para outros erros, relançar
+      throw error;
     }
-
-    const response: { payment: PaymentResponseDto; checkout_url?: string } = {
-      payment: new PaymentResponseDto(payment),
-    };
-
-    if (checkoutUrl) {
-      response.checkout_url = checkoutUrl;
-    }
-
-    return response;
   }
 
   @Put(':id')
@@ -172,8 +187,22 @@ export class PaymentController {
   ): Promise<PaymentResponseDto> {
     this.logger.log(`Atualizando pagamento ${id}: ${JSON.stringify(updatePaymentDto)}`);
 
-    const payment = await this.updatePaymentUseCase.execute(id, updatePaymentDto);
-    return new PaymentResponseDto(payment);
+    try {
+      const payment = await this.updatePaymentUseCase.execute(id, updatePaymentDto);
+      return new PaymentResponseDto(payment);
+    } catch (error) {
+      this.logger.error(`Erro ao atualizar pagamento ${id}: ${error.message}`);
+      
+      // Se for erro de validação de domínio, retornar Bad Request
+      if (error.message.includes('CPF inválido') || 
+          error.message.includes('obrigatório') || 
+          error.message.includes('inválido')) {
+        throw new BadRequestException(error.message);
+      }
+      
+      // Para outros erros, relançar
+      throw error;
+    }
   }
 
   @Get(':id')

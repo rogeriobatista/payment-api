@@ -4,8 +4,8 @@ import { PaymentMethod } from '@domain/enums';
 
 export class CreatePaymentDto {
   @ApiProperty({
-    description: 'CPF do pagador',
-    example: '123.456.789-00',
+    description: 'CPF do pagador (deve ser válido segundo algoritmo oficial)',
+    example: '11144477735',
     pattern: '^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$|^\\d{11}$',
     minLength: 11,
     maxLength: 14,
