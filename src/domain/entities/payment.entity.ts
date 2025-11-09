@@ -1,4 +1,5 @@
-import { PaymentMethod, PaymentStatus } from '../enums';
+import { PaymentMethod, PaymentStatus } from '@domain/enums';
+import { randomUUID } from 'crypto';
 
 export class Payment {
   public readonly id: string;
@@ -17,7 +18,7 @@ export class Payment {
     paymentMethod: PaymentMethod,
     id?: string,
   ) {
-    this.id = id;
+    this.id = id || randomUUID(); // Generate ID if not provided
     this.cpf = cpf;
     this.description = description;
     this.amount = amount;

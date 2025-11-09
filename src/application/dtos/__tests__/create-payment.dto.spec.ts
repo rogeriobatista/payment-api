@@ -282,7 +282,9 @@ describe('CreatePaymentDto', () => {
         '123',          // Too short
         '111444777352', // Too long
         'abcdefghijk',  // Non-numeric
-        '123.456.789-01', // With formatting
+        '123.456.789-0', // Incomplete formatted
+        '123.456.789-012', // Too long formatted
+        '12345678901a',  // Contains letters
       ];
 
       for (const cpf of invalidCPFs) {
@@ -296,10 +298,13 @@ describe('CreatePaymentDto', () => {
         const dto = plainToInstance(CreatePaymentDto, data);
         const errors = await validate(dto);
 
+        // Should have format validation errors for invalid CPFs
+        expect(errors.length).toBeGreaterThan(0);
+        
+        // Check if there's a CPF-related format error
         const cpfError = errors.find(error => error.property === 'cpf');
-        if (cpf.length !== 11 || !/^\d+$/.test(cpf)) {
-          expect(cpfError).toBeDefined();
-        }
+        expect(cpfError).toBeDefined();
+        expect(cpfError?.constraints).toBeDefined();
       }
     });
   });

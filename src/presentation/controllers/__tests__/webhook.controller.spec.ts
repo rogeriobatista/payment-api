@@ -134,9 +134,10 @@ describe('WebhookController', () => {
       const result = await controller.handleMercadoPagoWebhook(invalidWebhookData);
 
       // Assert
-      // The webhook controller handles errors gracefully and returns success message
+      // The webhook controller handles errors gracefully and returns error message
       expect(result).toEqual({
-        message: 'Webhook processado com sucesso',
+        success: false,
+        message: 'Webhook data inválido',
       });
     });
 
@@ -181,14 +182,15 @@ describe('WebhookController', () => {
         api_version: 'v1',
         action: 'payment.updated',
         data: {
-          id: '',
+          id: '', // Empty ID
         },
       };
 
       const result = await controller.handleMercadoPagoWebhook(webhookData);
 
       expect(result).toEqual({
-        message: 'Webhook processado com sucesso',
+        success: false,
+        message: 'Payment ID não informado',
       });
     });
 

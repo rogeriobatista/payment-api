@@ -470,7 +470,7 @@ describe('PaymentController', () => {
     it('should handle different payment methods correctly', async () => {
       // Test PIX payment
       const pixDto: CreatePaymentDto = {
-        cpf: '11111111111',
+        cpf: '52998224725', // Valid CPF
         description: 'PIX Payment',
         amount: 100,
         paymentMethod: PaymentMethod.PIX,
@@ -492,7 +492,7 @@ describe('PaymentController', () => {
 
       // Test Credit Card payment
       const ccDto: CreatePaymentDto = {
-        cpf: '22222222222',
+        cpf: '52998224725', // Valid CPF
         description: 'Credit Card Payment',
         amount: 200,
         paymentMethod: PaymentMethod.CREDIT_CARD,

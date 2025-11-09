@@ -5,13 +5,13 @@ describe('Payment Entity', () => {
   describe('constructor', () => {
     it('should create a payment with valid data', () => {
       const payment = new Payment(
-        '11144477735',
+        '52998224725', // Valid CPF
         'Test payment',
         100.50,
         PaymentMethod.PIX,
       );
 
-      expect(payment.cpf).toBe('11144477735');
+      expect(payment.cpf).toBe('52998224725');
       expect(payment.description).toBe('Test payment');
       expect(payment.amount).toBe(100.50);
       expect(payment.paymentMethod).toBe(PaymentMethod.PIX);
@@ -36,13 +36,13 @@ describe('Payment Entity', () => {
 
     it('should accept formatted CPF', () => {
       const payment = new Payment(
-        '123.456.789-01',
+        '529.982.247-25', // Valid CPF formatted
         'Test payment',
         100.50,
         PaymentMethod.PIX,
       );
 
-      expect(payment.cpf).toBe('123.456.789-01');
+      expect(payment.cpf).toBe('529.982.247-25');
     });
 
     it('should throw error for empty CPF', () => {

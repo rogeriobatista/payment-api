@@ -78,8 +78,19 @@ export class WebhookController {
     this.logger.log(`Webhook recebido do Mercado Pago: ${JSON.stringify(webhookData)}`);
 
     try {
+      // Verificar se o webhook data é válido
+      if (!webhookData || !webhookData.type) {
+        this.logger.warn('Webhook data inválido ou tipo não informado');
+        return { success: false, message: 'Webhook data inválido' };
+      }
+
       // Verificar se é uma notificação de pagamento
       if (webhookData.type === 'payment') {
+        if (!webhookData.data || !webhookData.data.id) {
+          this.logger.warn('Webhook de pagamento sem ID válido');
+          return { success: false, message: 'Payment ID não informado' };
+        }
+
         const paymentId = webhookData.data.id;
         
         // Aqui você implementaria a lógica para consultar o status do pagamento
